@@ -1,0 +1,86 @@
+/* Reset default styling */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  /* Full-page centering */
+  html, body {
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #f3f4f6; /* Fallback background color */
+    background-image: url('https://cdn.pixabay.com/photo/2019/10/26/11/40/building-4579244_1280.jpg');
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center;
+    overflow: hidden; /* Prevent scrollbars */
+  }
+  
+  /* Container styling */
+  .form-container {
+    background-color: rgba(255, 255, 255, 0.95); /* Slightly transparent white */
+    border-radius: 10px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    padding: 20px 30px;
+    width: 600px;
+    max-width: 90%;
+    text-align: center;
+    overflow: hidden; /* Prevent content overflow */
+  }
+  
+  /* Form styling */
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* Space between rows */
+  }
+  
+  .form-row {
+    display: flex;
+    gap: 15px; /* Space between two inputs in a row */
+    flex-wrap: wrap; /* Allow wrapping for small screens */
+  }
+  
+  .form-group {
+    flex: 1; /* Let inputs share space equally */
+    min-width: 45%; /* Ensure fields don't shrink too much */
+  }
+  
+  .form-group input,
+  .form-group select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #cccccc;
+    border-radius: 5px;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+  
+  .submit-btn {
+    background-color: #5a67d8;
+    color: #ffffff;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+  
+  .submit-btn:hover {
+    background-color: #434190;
+  }
+  
+  /* Media query for very small screens */
+  @media (max-width: 768px) {
+    .form-row {
+      flex-direction: column; /* Stack inputs vertically */
+    }
+  
+    .form-group {
+      min-width: 100%; /* Full-width for small screens */
+    }
+}
