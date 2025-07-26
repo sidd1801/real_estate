@@ -1,369 +1,184 @@
-from tabulate import tabulate
+from flask import Flask, jsonify, request
+from flask_cors import CORS
 import mysql.connector
-from decimal import *
 
-# Declaring variables to use
+app = Flask(__name__)
+CORS(app)  # Enable CORS for frontend requests
 
-connector = mysql.connector.connect(host='localhost', user='shruti_0709', password='Shruti@0709', database='real_estate_db')
+# Database Connection
+db = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password="Siddhant@18012003",
+    database="real_estate_db"
+)
+cursor = db.cursor(dictionary=True)
 
-run = True
-if connector:
-    print("Connected\n")
-else: print("Connection error")
+# All tables in the database
+TABLES = {
+    "users": "Users",
+    "agents": "Agents",
+    "properties": "Properties",
+    "soldproperties": "SoldProperties",
+    "unsoldproperties": "UnsoldProperties",
+    "rentproperties": "RentProperties"
+}
 
-# Declaring functions to use
-tabless = []
-def getDataTables():
-    res = connector.cursor()
-    sqlCommand = "SELECT DISTINCT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME IN ('users', 'agents', 'properties')"
-    res.execute(sqlCommand)
-    output = res.fetchall()
-    tables = [row[0] for row in output]
-    tabless.append(tables)
-    print(tabless)
-# PROPERTIES DATA ONLY
+# -----------------------------
+# Get table attributes dynamically
+# -----------------------------
+@app.route('/api/attributes', methods=['GET'])
+def get_table_attributes():
+    table = request.args.get('table')
 
-def checkForAgent(AgentID):
-    res = connector.cursor()
+    if table not in TABLES:
+        return jsonify({"error": "Invalid table"}), 400
+
+    query = f"DESCRIBE {TABLES[table]}"
+    cursor.execute(query)
+    attributes = [row["Field"] for row in cursor.fetchall()]
+    return jsonify(attributes)
+
+# -----------------------------
+# Fetch data dynamically
+# -----------------------------
+@app.route('/api/fetch', methods=['GET'])
+def fetch_data():
+    table = request.args.get('table')
+    filter_column = request.args.get('filter_column')
+    filter_value = request.args.get('filter_value')
+
+    if table not in TABLES:
+        return jsonify({"error": "Invalid table"}), 400
+
+    query = f"SELECT * FROM {TABLES[table]}"
+    values = ()
+
+    if filter_column and filter_value:
+        query += f" WHERE {filter_column}=%s"
+        values = (filter_value,)
+
     try:
-        checkIngQuery = "SELECT COUNT(*) FROM Agents WHERE AgentID = %s"
-        props = (AgentID,)
-        res.execute(checkIngQuery, props)
-        result = res.fetchone()
-        agent_exists = result[0] > 0
-        return agent_exists
+        cursor.execute(query, values)
+        data = cursor.fetchall()
+        return jsonify(data)
     except mysql.connector.Error as err:
-        return False
+        return jsonify({"error": str(err)}), 500
 
+# -----------------------------
+# Insert data dynamically
+# -----------------------------
+@app.route('/api/insert', methods=['POST'])
+def insert_data():
+    table = request.json.get("table")
+    data = request.json.get("data")
 
-def createPropertiesData( AgentID, Status, Address,  ZipCode,City, State, SquareFeet, Price, Type,LotSize,Beds,Baths):
-    res = connector.cursor()
+    if table not in TABLES or not data:
+        return jsonify({"error": "Invalid table or data"}), 400
 
-    if checkForAgent(AgentID):
-        insert_query = "INSERT INTO Properties ( AgentID, Status, Address,  ZipCode,City, State, SquareFeet, Price, Type,LotSize,Beds,Baths) VALUES ( %(AgentID)s, %(Status)s, %(Address)s, %(ZipCode)s, %(City)s, %(State)s, %(SquareFeet)s, %(Price)s, %(Type)s, %(LotSize)s, %(Beds)s, %(Baths)s)"
-        new_property = {
-            "AgentID": AgentID,
-            "Status": Status,
-            "Address": Address,
-            "ZipCode": ZipCode,
-            "City": City,
-            "State": State,
-            "SquareFeet": SquareFeet,
-            "Price": Price,
-            "Type": Type,
-            "LotSize": LotSize,
-            "Beds": Beds,
-            "Baths": Baths
-        }
-        res.execute(insert_query, new_property)
-        connector.commit()
-        print("Inserted successfully!")
-    else:
-        print("Agent not found")
+    columns = ", ".join(data.keys())
+    placeholders = ", ".join(["%s"] * len(data))
+    values = tuple(data.values())
 
-
-def updatePropertiesData(PropertyID, AgentID, Status, Address,  ZipCode,City, State, SquareFeet, Price, Type,LotSize,Beds,Baths):
-    res = connector.cursor()
-    if checkForAgent(AgentID):
-        update_query = "UPDATE Properties SET AgentID=%s, Status=%s, Address=%s, ZipCode=%s, City=%s, State=%s, SquareFeet=%s, Price=%s, Type=%s, LotSize=%s, Beds=%s, Baths=%s WHERE PropertyID=%s"
-        new_property = (
-        AgentID, Status, Address, ZipCode, City, State, SquareFeet, Price, Type, LotSize, Beds, Baths, PropertyID)
-        res.execute(update_query, new_property)
-        connector.commit()
-        print("Updated successfully!")
-    else:
-        print("Agent not found!")
-
-
-def printUserData():
-    res = connector.cursor()
-    output_query = "SELECT * FROM Users"
-    res.execute(output_query)
-    
-    # Define headers corresponding to the columns in the Users table
-    headers = ["UserID", "Name", "Email", "Phone", "Role", "Address"]
-    
-    # Fetch and print data in tabular format
-    print(tabulate(res.fetchall(), headers=headers, tablefmt="grid"))
-
-def deletePropertiesData(PropertyID):
-    res = connector.cursor()
-    delete_query = "DELETE FROM Properties WHERE PropertyID=%s"
-    new_property = (PropertyID,) # Don't forget comma here, if it is not there, code won't work
-    res.execute(delete_query, new_property)
-    connector.commit()
-    print("Deleted successfully!")
-
-#---------------------------------------------------------
-
-# USERS ONLY
-def createUsersData(Name, Email, MobileNumber, BuyerSellerAgent, Address):
-    res = connector.cursor()
-    new_property = {
-        "Name": Name,
-        "Email": Email,
-        "MobileNumber": MobileNumber,
-        "BuyerSellerAgent": BuyerSellerAgent,
-        "Address": Address
-    }
-    create_query= "INSERT INTO Users (Name, Email, MobileNumber, BuyerSellerAgent, Address) VALUES (%(Name)s, %(Email)s, %(MobileNumber)s, %(BuyerSellerAgent)s, %(Address)s) "
-    res.execute(create_query, new_property)
-    connector.commit()
-    print("Inserted successfully!")
-def updateUserData(UserID, Name, Email, MobileNumber, BuyerSellerAgent, Address):
-    res = connector.cursor()
-    new_property = (Name, Email, MobileNumber, BuyerSellerAgent , Address, UserID)
-    update_query = "UPDATE Users SET Name=%s, Email=%s, MobileNumber=%s, BuyerSellerAgent=%s, Address=%s WHERE UserID= %s"
-    res.execute(update_query, new_property)
-    connector.commit()
-    print("Updated successfully!")
-def deleteUserData(UserID):
-    res = connector.cursor()
-    if checkForUser(UserID):
-        if checkForUserIsAgent(UserID):
-            getAgentIDQuery = "SELECT AgentID FROM Agents WHERE UserID = %s"
-            props = (UserID,)
-            res.execute(getAgentIDQuery, props)
-            agentID = res.fetchone()[0]
-            updateAgentData(agentID, None, None, None, None)
-
-    delete_query = "DELETE FROM Users WHERE UserID=%s "
-    new_property = (UserID, ) # Don't forget comma here, if it is not there, code won't work
-    res.execute(delete_query, new_property)
-    connector.commit()
-    print("Deleted Successfully!")
-def outputPropertiesData():
-    res = connector.cursor()
-    output_query = "SELECT * FROM Properties"
-    res.execute(output_query)
-    output = res.fetchall()
-
-    # Fetching column names for headers
-    headers = [i[0] for i in res.description]
-
-    # Printing the table with headers
-    print(tabulate(output, headers=headers, tablefmt="grid"))
-
-    # print(tabulate(output, headers=["UserID", "Name", "Email", "MobileNumber", "BuyerSellerAgent", "Address"]))
-
-
-#------------------------------------------------------------
-
-# AGENTS ONLY
-def checkForUser(user_id):
+    query = f"INSERT INTO {TABLES[table]} ({columns}) VALUES ({placeholders})"
     try:
-        cursor = connector.cursor()
-        query = "SELECT COUNT(*) FROM users WHERE UserID = %s AND BuyerSellerAgent = 'Agent'"
-        cursor.execute(query, (user_id,))
-        result = cursor.fetchone()
-        user_exists = result[0] > 0
-        return user_exists
+        cursor.execute(query, values)
+        db.commit()
+        return jsonify({"message": "Record inserted successfully"})
     except mysql.connector.Error as err:
-        return False
+        return jsonify({"error": str(err)}), 500
 
-def checkForUserIsAgent(user_id):
+# -----------------------------
+# Update data dynamically
+# -----------------------------
+@app.route('/api/update', methods=['PUT'])
+def update_data():
+    table = request.json.get("table")
+    filter_column = request.json.get("filter_column")
+    filter_value = request.json.get("filter_value")
+    update_column = request.json.get("update_column")
+    update_value = request.json.get("update_value")
+
+    if table not in TABLES or not filter_column or not filter_value or not update_column or not update_value:
+        return jsonify({"error": "Invalid update parameters"}), 400
+
+    query = f"UPDATE {TABLES[table]} SET {update_column}=%s WHERE {filter_column}=%s"
+    values = (update_value, filter_value)
+
     try:
-        res = connector.cursor()
-        query = "SELECT COUNT(*) FROM Agents WHERE UserID = %s NOT IN (  SELECT UserID = %s FROM Users);"
-        res.execute(query, (user_id))
-        print(res.fetchone())
-        result = res.fetchone()
-        userIsAgent = result[0] > 0
-        return userIsAgent
+        cursor.execute(query, values)
+        db.commit()
+        return jsonify({"message": "Record updated successfully"})
     except mysql.connector.Error as err:
-        return False
+        return jsonify({"error": str(err)}), 500
 
+# -----------------------------
+# Delete data dynamically
+# -----------------------------
+@app.route('/api/delete', methods=['DELETE'])
+def delete_data():
+    table = request.json.get("table")
+    filter_column = request.json.get("filter_column")
+    filter_value = request.json.get("filter_value")
 
-def getUserIDBasedOnName(AgentName):
-    res = connector.cursor()
-    getIDquery= "SELECT Users.UserID FROM Users WHERE Name = %s"
-    res.execute(getIDquery, (AgentName,))
-    return res.fetchone()[0]
+    if table not in TABLES or not filter_column or not filter_value:
+        return jsonify({"error": "Invalid delete parameters"}), 400
 
-def createAgentData(AgentCompany, Agent_Name, Experience, Location, Languages):
+    query = f"DELETE FROM {TABLES[table]} WHERE {filter_column}=%s"
+    values = (filter_value,)
 
-    createUsersData(Agent_Name, None, None, 'Agent', None)
-    userID = getUserIDBasedOnName(Agent_Name)
-    res = connector.cursor()
-    new_properties = {
-        "UserID": userID,
-        "AgentCompany": AgentCompany,
-        "Agent_Name": Agent_Name,
-        "Experience": Experience,
-        "Location": Location,
-        "Languages": Languages
-    }
+    try:
+        cursor.execute(query, values)
+        db.commit()
+        return jsonify({"message": "Record deleted successfully"})
+    except mysql.connector.Error as err:
+        return jsonify({"error": str(err)}), 500
 
-    create_query = "INSERT INTO Agents (  UserID, AgentCompany, Agent_Name, Experience, Location, Languages) VALUES (%(UserID)s, %(AgentCompany)s, %(Agent_Name)s, %(Experience)s, %(Location)s, %(Languages)s)"
-    res.execute(create_query, new_properties)
-    connector.commit()
-    print("Insert successfully!")
+# -----------------------------
+# Calculate property price (NEW)
+# -----------------------------
+@app.route('/api/calculate-price/<int:property_id>', methods=['GET'])
+def calculate_property_price(property_id):
+    try:
+        # Step 1: Get property info
+        cursor.execute("SELECT * FROM Properties WHERE id = %s", (property_id,))
+        property_data = cursor.fetchone()
 
-def updateAgentData(AgentID, AgentCompany, Experience, Location, Languages):
-    res = connector.cursor()
-    getUserIdQuery = "SELECT UserID FROM Agents WHERE AgentID = %s"
-    getUserProps = (AgentID,)
-    res.execute(getUserIdQuery, getUserProps)
-    userId = res.fetchone()[0]
-    if checkForUser(userId):
-        update_query = "UPDATE Agents SET AgentCompany = %s, Experience= %s, Location= %s, Languages= %s WHERE AgentID = %s"
-        props = (AgentCompany, Experience, Location, Languages, AgentID)
-        res.execute(update_query, props)
-        connector.commit()
-        print("Updated successfully!")
+        if not property_data:
+            return jsonify({"error": "Property not found"}), 404
 
-def deleteAgentData(AgentID):
-    res = connector.cursor()
-    def checkForProperties(AgentID):
-        try:
-            checkQuery = "SELECT COUNT(*) FROM Properties WHERE AgentID = %s"
-            props = (AgentID,)
-            res.execute(checkQuery, props)
-            result = res.fetchone()
-            property_exists = result[0] > 0
-            return property_exists
-        except mysql.connector.Error as err:
-            return False
-    if checkForProperties(AgentID):
-        update_property = "UPDATE Properties SET AgentID = null WHERE AgentID = %s"
-        props = (AgentID,)
-        res.execute(update_property, props)
-        connector.commit()
-        print("Deleting Agent from property...")
+        base_price = property_data.get('price')
+        location = property_data.get('location')
 
-    deleteUserQuery = "DELETE FROM Agents WHERE AgentID = %s"
-    props = (AgentID,)
-    res.execute(deleteUserQuery, props)
-    connector.commit()
-    print("Deleted successfully!")
+        # Step 2: Get location-specific tax rates
+        cursor.execute("SELECT * FROM location_charges WHERE location = %s", (location,))
+        charges = cursor.fetchone()
 
+        if not charges:
+            return jsonify({"error": f"No tax data found for location: {location}"}), 404
 
-def printAgentData():
-    res = connector.cursor()
-    outputQuery = "SELECT * FROM Agents"
-    res.execute(outputQuery)
-    output = res.fetchall()
-    print(tabulate(output, headers=["AgentID", "UserID", "AgentCompany",  "Agent_Name", "Experience", "Location", "Languages"]))
+        # Step 3: Calculate components
+        gst = base_price * (charges['gst_percent'] / 100)
+        registration = base_price * (charges['registration_percent'] / 100)
+        property_tax = base_price * (charges['property_tax_percent'] / 100)
+        total_price = base_price + gst + registration + property_tax
 
-# Main code
-while run:
-    getDataTables()
-    datatable = input("Choose the data table : ").lower()
+        # Step 4: Return breakdown
+        return jsonify({
+            "property_id": property_id,
+            "location": location,
+            "base_price": base_price,
+            "gst": round(gst, 2),
+            "registration": round(registration, 2),
+            "property_tax": round(property_tax, 2),
+            "total_price": round(total_price, 2)
+        })
 
-    if datatable != "properties" and datatable != "users" and datatable != "agents":
-        print("Could not find Data Table.")
-        # break # remove if want to keep loop
-    else:
-        while True:
-            print("-"*15)
-            print("1. Create data")
-            print("2. Update data")
-            print("3. Delete data")
-            print("4. Output data")
-            print("5. Exit")
-            try:
-             choice = int(input("Enter your choice: "))
-            except:
-                print("Invalid Input\n")
-                break
+    except mysql.connector.Error as err:
+        return jsonify({"error": str(err)}), 500
 
-            # Adding data to properties table
-            if datatable == "properties":
-                if choice == 1:
-                    property_agentID = int(input("Provide AgentID: "))
-                    # checkForAgent(property_agentID)
-                    status = input("Provide status:old/Unsold/Rent: ")
-                    adress = input("Provide address: ")
-                    zipCode = input("Provide zip code: ")
-                    city = input("Provide City: ")
-                    state = input("Provide state state ( Ex. IL for Illinois ): ")
-                    square_feet = int(input("Provide square feet: "))
-                    price = float(input("Provide the price: "))
-                    type = input("Provide property type: ")
-                    lotSize = float(input("Provide lot size of the property: "))
-                    beds = int(input("Provide number of beds: "))
-                    baths = int(input("Provide number of baths: "))
-                    createPropertiesData( property_agentID, status, adress, zipCode, city, state,
-                                         square_feet,
-                                         price,
-                                         type, lotSize, beds, baths)
-                elif choice == 2:
-                    propertyID = int(input("Provide PropertyID that you want to change: "))
-                    agentID = int(input("Provide AgentID: "))
-                    status = input("Provide status: Sold/Unsold/Rent: ")
-                    adress = input("Provide address: ")
-                    zipCode = input("Provide zip code: ")
-                    city = input("Provide City: ")
-                    state = input("Provide state : ")
-                    square_feet = int(input("Provide square feet: "))
-                    price = float(input("Provide the price: "))
-                    type = input("Provide property type: ")
-                    lotSize = float(input("Provide lot size of the property: "))
-                    beds = int(input("Provide number of beds: "))
-                    baths = int(input("Provide number of baths: "))
-                    updatePropertiesData(propertyID, agentID, status, adress, zipCode, city, state, square_feet,
-                                         price,
-                                         type, lotSize, beds, baths)
-                elif choice == 3:
-                    propertyID = int(input("Provide PropertyID that you want to delete: "))
-                    deletePropertiesData(propertyID)
-                elif choice == 4:
-                    outputPropertiesData()
-                elif choice == 5:
-                    break
-                else:
-                    print("Invalid input")
-                    break
-            if datatable == "users":
-                if choice == 1:
-                    name = input("Provide Name to add: ")
-                    email = input("Provide Email to add: ")
-                    mobileNumber = input("Provide mobile number to add: ")
-                    buyerSellerAgent = input("Is it buyer, seller or agent? ")
-                    user_address = input("Provide Address to add: ")
-                    createUsersData(name, email, mobileNumber, buyerSellerAgent, user_address)
-                elif choice == 2:
-                    userID = int(input("Provide UserID to update: "))
-                    name = input("Provide Name ")
-                    email = input("Provide Email ")
-                    mobileNumber = input("Provide mobile number ")
-                    buyerSellerAgent = input("Is it buyer, seller or agent? ")
-                    user_address = input("Provide Address ")
-                    updateUserData(userID, name, email, mobileNumber, buyerSellerAgent, user_address)
-                elif choice == 3:
-                    userID = int(input("Provide UserID to delete: "))
-                    deleteUserData(userID)
-                elif choice == 4:
-                    printUserData()
-                elif choice == 5:
-                    break
-            if datatable == "agents":
-                if choice == 1:
-                    agentCompany = input("Provide company to add: ")
-                    agentName = input("Provide Agent Name: ")
-                    experience = int(input("Provide agent's experience: "))
-                    location = input("Provide location: ")
-                    languages = input("Provide languages: ")
-                    createAgentData( agentCompany, agentName, experience, location, languages)
-                elif choice == 2:
-                    agentID = int(input("Provide AgentID to update:  "))
-                    agentCompany = input("Provide company to update: ")
-                    experience = int(input("Provide agent's experience: "))
-                    location = input("Provide location: ")
-                    languages = input("Provide languages: ")
-                    updateAgentData(agentID, agentCompany, experience, location, languages)
-                elif choice == 3:
-                    agentID = int(input("Provide AgentID to delete: "))
-                    deleteAgentData(agentID)
-                elif choice == 4:
-                    printAgentData()
-                elif choice == 5:
-                    break
-
-
-
-
-
-
-
-
+# -----------------------------
+# Run the Flask app
+# -----------------------------
+if __name__ == '__main__':
+    app.run(debug=True)
